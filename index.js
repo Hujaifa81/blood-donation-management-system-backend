@@ -9,7 +9,7 @@ const app = express();
 const port = process.env.PORT || 5000;
 const secretKey = process.env.JWT_SECRET;
 app.use(cors({
-  origin: ['http://localhost:5173','https://online-tutor-booking-5eb85.web.app'],
+  origin: ['http://localhost:5173'],
   credentials: true,
 }));
 app.use(express.json());
@@ -50,15 +50,66 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // Connect the client to the server	(optional starting in v4.7)
-    await client.connect();
-    // Send a ping to confirm a successful connection
-    await client.db("admin").command({ ping: 1 });
-    // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // await client.connect();
+    const usersCollection=client.db('blood_donation').collection('users');
+
+    // Verify JWT token
+    app.post('/jwt', async (req, res) => {
+      const user=req.body;
+      const token=jwt.sign(user, secretKey, { expiresIn: '1h' });
+      res.cookie('token', token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+      })
+      .send({success:true});
+
+    })
+    // Create a new user
+    app.post('/users/:email',async(req,res)=>{
+      const email=req.params.email;
+      const user=req.body;
+      const query={email};
+      const isExist=await usersCollection.findOne(query);
+      if(isExist){
+       const updateDoc = {
+        $set: {
+        signedIn: new Date(),
+      },
+      };
+      const result = await usersCollection.updateOne(query, updateDoc)
+        return res.status(200).send({ message:'User already exists', result });
+      }
+      const result=await usersCollection.insertOne({
+        ...user,
+        role:'donor',
+        status:'active',
+        createdAt:new Date(),
+        signedIn:new Date()
+      });
+      res.status(201).send({
+        message:'User created successfully',
+        result
+      });
+    })
+    app.post('/logout', async (req, res) => {
+      res.clearCookie('token', {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',// Set to true if using HTTPS
+        sameSite:process.env.NODE_ENV === 'production'?'none':'strict',
+      })
+      res.send({ success: true });
+    })
     
+
+    // // Connect the client to the server	(optional starting in v4.7)
+    
+    // // Send a ping to confirm a successful connection
+    // await client.db("admin").command({ ping: 1 });
+    // // console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
-    await client.close();
+    // await client.close();
   }
 }
 run().catch(console.dir);
