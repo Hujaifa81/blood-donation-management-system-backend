@@ -9,7 +9,7 @@ const app = express();
 const port = process.env.PORT || 5000;
 const secretKey = process.env.JWT_SECRET;
 app.use(cors({
-  origin: ['http://localhost:5173','https://blood-donation-managemen-7ebd3.web.app'],
+  origin: ['http://localhost:5173', 'https://blood-donation-managemen-7ebd3.web.app'],
   credentials: true,
 }));
 app.use(express.json());
@@ -66,11 +66,21 @@ async function run() {
         .send({ success: true });
 
     })
+    //get all users
+    app.get('/users', async (req, res) => {
+      const status = req.query.status
+      let query = {}
+      if (status) {
+        query = { status }
+      }
+      const result = await usersCollection.find(query).toArray()
+      res.send(result)
+    })
     //get single user by email
-    app.get('/user/:email',async (req,res)=>{
-      const email=req.params.email
-      const query={email}
-      const result=await usersCollection.findOne(query)
+    app.get('/user/:email', async (req, res) => {
+      const email = req.params.email
+      const query = { email }
+      const result = await usersCollection.findOne(query)
       res.send(result)
     })
     // Create a new user
@@ -100,23 +110,47 @@ async function run() {
         result
       });
     })
-     //update user details
-    app.put('/user/:email',async(req,res)=>{
-      const email=req.params.email;
-      const {name,bloodGroup,district,upazila,image}=req.body
-      const query={email}
-      const updateDoc={
-        $set:{
-          name:name,
-          bloodGroup:bloodGroup,
-          district:district,
-          upazila:upazila,
-          image:image
+    //update user details
+    app.put('/user/:email', async (req, res) => {
+      const email = req.params.email;
+      const { name, bloodGroup, district, upazila, image } = req.body
+      const query = { email }
+      const updateDoc = {
+        $set: {
+          name: name,
+          bloodGroup: bloodGroup,
+          district: district,
+          upazila: upazila,
+          image: image
         }
       }
       const result = await usersCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
 
+    })
+    //update user status or role
+    app.patch('/user/:id', async (req, res) => {
+      const id = req.params.id;
+      const data = req.body
+      const query = { _id: new ObjectId(id) }
+      let updateDoc={}
+      if (data.userStatus) {
+         updateDoc = {
+          $set: {
+            status: data.userStatus,
+          }
+        }
+      }
+      else{
+        updateDoc = {
+          $set: {
+            role: data.role,
+          }
+      }
+    }
+
+      const result = await usersCollection.updateOne(query, updateDoc)
+      return res.status(200).send({ message: 'successful', result });
     })
     //get single donation request by id
     app.get('/donationRequest/:id', async (req, res) => {
@@ -126,13 +160,38 @@ async function run() {
       const result = await donationRequestsCollection.findOne(query);
       res.send(result);
     });
-   
+    //get all donation requests
+    app.get('/donationRequests', async (req, res) => {
+
+      const status = req.query.status
+      let query = {};
+      if (status) {
+        query = {
+          status: status
+        }
+      }
+
+      const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
+      const result = await cursor.toArray();
+
+      res.send(result);
+    });
     //get donation request by email
     app.get('/donationRequests/:email', async (req, res) => {
       const email = req.params.email;
-      const query = { email: email }; // Ensure this matches your DB field
+      const limit = parseInt(req.query.limit)
+      const status = req.query.status
+      let query = { email: email };
+      if (status && email) {
+        query = {
+          email: email,
+          status: status
+        }
+      }
 
-      const result = await donationRequestsCollection.find(query).toArray();
+      const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
+      const result = limit ? await cursor.limit(3).toArray() : await cursor.toArray();
+
       res.send(result);
     });
 
@@ -156,23 +215,23 @@ async function run() {
     //update donation request
     app.put('/donationRequests/:id', async (req, res) => {
       const id = req.params.id
-      const { recipientName,recipientDistrict,donationTime,recipientUpazila,hospitalName,fullAddress,bloodGroup,donationDate} = req.body
+      const { recipientName, recipientDistrict, donationTime, recipientUpazila, hospitalName, fullAddress, bloodGroup, donationDate } = req.body
       const query = { _id: new ObjectId(id) }
       let updateDoc = {
         $set: {
-          recipientName:recipientName,
-          recipientDistrict:recipientDistrict,
-          recipientUpazila:recipientUpazila,
-          hospitalName:hospitalName,
-          fullAddress:fullAddress,
-          bloodGroup:bloodGroup,
-          donationDate:donationDate,
-          donationTime:donationTime,
+          recipientName: recipientName,
+          recipientDistrict: recipientDistrict,
+          recipientUpazila: recipientUpazila,
+          hospitalName: hospitalName,
+          fullAddress: fullAddress,
+          bloodGroup: bloodGroup,
+          donationDate: donationDate,
+          donationTime: donationTime,
 
         },
       };
-      
-      
+
+
       const result = await donationRequestsCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
     })
@@ -187,23 +246,23 @@ async function run() {
         },
       };
       if (status === 'inprogress') {
-         updateDoc = {
+        updateDoc = {
           $set: {
             status: status,
-            donorInfo:req.body.donorInfo
+            donorInfo: req.body.donorInfo
           },
         };
       }
-      
+
       const result = await donationRequestsCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
     })
     //delete a request
-    app.delete('/donationRequests/:id',async(req,res)=>{
-      const id=req.params.id;
-      const query={_id:new ObjectId(id)}
-      const result=await donationRequestsCollection.deleteOne(query)
-      res.send({success:true})
+    app.delete('/donationRequests/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await donationRequestsCollection.deleteOne(query)
+      res.send({ success: true })
     })
     //logout
     app.post('/logout', async (req, res) => {
