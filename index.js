@@ -328,7 +328,7 @@ async function run() {
     //get blogs count
     app.get('/blogs/count', async (req, res) => {
       const status = req.query.status
-      
+
       let query = {}
       if (status) {
         query = { status }
@@ -343,7 +343,7 @@ async function run() {
       const limit = parseInt(req.query.limit);
       const skip = (page - 1) * limit;
       try {
-        
+
         let query = {};
 
         if (status) {
@@ -365,13 +365,13 @@ async function run() {
     //update blog status
     app.patch('/blogs/:id', async (req, res) => {
       const id = req.params.id;
-      const {status} = req.body
+      const { status } = req.body
       const query = { _id: new ObjectId(id) }
       let updateDoc = {}
-      if (status==='drafted') {
+      if (status === 'drafted') {
         updateDoc = {
           $set: {
-            status:'published',
+            status: 'published',
           }
         }
       }
@@ -386,7 +386,13 @@ async function run() {
       const result = await blogsCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
     })
-
+     //delete a request
+    app.delete('/blogs/:id', async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) }
+      const result = await blogsCollection.deleteOne(query)
+      res.send({ success: true })
+    })
     // // Connect the client to the server	(optional starting in v4.7)
 
     // // Send a ping to confirm a successful connection
