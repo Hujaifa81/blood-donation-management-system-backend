@@ -53,7 +53,7 @@ async function run() {
     // await client.connect();
     const usersCollection = client.db('blood_donation').collection('users');
     const donationRequestsCollection = client.db('blood_donation').collection('donationRequests')
-
+    const blogsCollection = client.db('blood_donation').collection('blogs')
     // Verify JWT token
     app.post('/jwt', async (req, res) => {
       const user = req.body;
@@ -168,11 +168,11 @@ async function run() {
     })
     //donation requests count by email
     app.get('/donationRequests/count/:email', async (req, res) => {
-    const email=req.params.email
+      const email = req.params.email
       const status = req.query.status
-      let query = {email:email}
+      let query = { email: email }
       if (status) {
-        query = { status,email }
+        query = { status, email }
       }
       const result = await donationRequestsCollection.countDocuments(query);
       res.send(result)
@@ -313,7 +313,79 @@ async function run() {
       })
       res.send({ success: true });
     })
+    //create a blog
+    app.post('/blogs', async (req, res) => {
+      const data = req.body
+      const result = await blogsCollection.insertOne({
+        ...data,
+        status: 'drafted'
+      })
+      res.status(201).send({
+        message: 'blogs created successfully',
+        result
+      });
+    })
+    //get blogs count
+    app.get('/blogs/count', async (req, res) => {
+      const status = req.query.status
+      
+      let query = {}
+      if (status) {
+        query = { status }
+      }
+      const result = await blogsCollection.countDocuments(query);
+      res.send(result)
+    })
+    //get all blogs
+    app.get('/blogs', async (req, res) => {
+      const status = req.query.status;
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = (page - 1) * limit;
+      try {
+        
+        let query = {};
 
+        if (status) {
+          query.status = status;
+        }
+
+        const result = await blogsCollection.find(query).skip(skip).limit(limit).toArray();
+        res.status(200).send(
+          result
+        );
+      } catch (error) {
+        console.error('Failed to fetch blogs:', error);
+        res.status(500).send({
+          message: 'Internal server error',
+          error: error.message
+        });
+      }
+    });
+    //update blog status
+    app.patch('/blogs/:id', async (req, res) => {
+      const id = req.params.id;
+      const {status} = req.body
+      const query = { _id: new ObjectId(id) }
+      let updateDoc = {}
+      if (status==='drafted') {
+        updateDoc = {
+          $set: {
+            status:'published',
+          }
+        }
+      }
+      else {
+        updateDoc = {
+          $set: {
+            status: 'drafted',
+          }
+        }
+      }
+
+      const result = await blogsCollection.updateOne(query, updateDoc)
+      return res.status(200).send({ message: 'successful', result });
+    })
 
     // // Connect the client to the server	(optional starting in v4.7)
 
