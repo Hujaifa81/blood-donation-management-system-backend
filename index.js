@@ -66,14 +66,28 @@ async function run() {
         .send({ success: true });
 
     })
-    //get all users
-    app.get('/users', async (req, res) => {
+    //users count
+    app.get('/users/count', async (req, res) => {
       const status = req.query.status
       let query = {}
       if (status) {
         query = { status }
       }
-      const result = await usersCollection.find(query).toArray()
+      const result = await usersCollection.countDocuments(query);
+
+      res.send(result)
+    })
+    //get all users
+    app.get('/users', async (req, res) => {
+      const status = req.query.status
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = (page - 1) * limit;
+      let query = {}
+      if (status) {
+        query.status = status
+      }
+      const result = await usersCollection.find(query).skip(skip).limit(limit).toArray()
       res.send(result)
     })
     //get single user by email
@@ -133,24 +147,35 @@ async function run() {
       const id = req.params.id;
       const data = req.body
       const query = { _id: new ObjectId(id) }
-      let updateDoc={}
+      let updateDoc = {}
       if (data.userStatus) {
-         updateDoc = {
+        updateDoc = {
           $set: {
             status: data.userStatus,
           }
         }
       }
-      else{
+      else {
         updateDoc = {
           $set: {
             role: data.role,
           }
+        }
       }
-    }
 
       const result = await usersCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
+    })
+    //donation requests count by email
+    app.get('/donationRequests/count/:email', async (req, res) => {
+    const email=req.params.email
+      const status = req.query.status
+      let query = {email:email}
+      if (status) {
+        query = { status,email }
+      }
+      const result = await donationRequestsCollection.countDocuments(query);
+      res.send(result)
     })
     //get single donation request by id
     app.get('/donationRequest/:id', async (req, res) => {
@@ -160,9 +185,21 @@ async function run() {
       const result = await donationRequestsCollection.findOne(query);
       res.send(result);
     });
+    //donation requests count
+    app.get('/donationRequests/count', async (req, res) => {
+      const status = req.query.status
+      let query = {}
+      if (status) {
+        query = { status }
+      }
+      const result = await donationRequestsCollection.countDocuments(query);
+      res.send(result)
+    })
     //get all donation requests
     app.get('/donationRequests', async (req, res) => {
-
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = (page - 1) * limit;
       const status = req.query.status
       let query = {};
       if (status) {
@@ -172,14 +209,17 @@ async function run() {
       }
 
       const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
-      const result = await cursor.toArray();
+      const result = await cursor.skip(skip).limit(limit).toArray();
 
       res.send(result);
     });
     //get donation request by email
     app.get('/donationRequests/:email', async (req, res) => {
       const email = req.params.email;
-      const limit = parseInt(req.query.limit)
+      const page = parseInt(req.query.page);
+      const limit = parseInt(req.query.limit);
+      const skip = (page - 1) * limit;
+      const limitPerPage = parseInt(req.query.limit)
       const status = req.query.status
       let query = { email: email };
       if (status && email) {
@@ -190,7 +230,7 @@ async function run() {
       }
 
       const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
-      const result = limit ? await cursor.limit(3).toArray() : await cursor.toArray();
+      const result = limitPerPage ? await cursor.limit(3).toArray() : await cursor.skip(skip).limit(limit).toArray();
 
       res.send(result);
     });
