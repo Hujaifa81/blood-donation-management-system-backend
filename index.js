@@ -362,6 +362,21 @@ async function run() {
         });
       }
     });
+    //update a blog
+    app.put('/blog/:id', async (req, res) => {
+      const id = req.params.id
+      const { title, content, thumbnail } = req.body
+      const query = { _id: new ObjectId(id) }
+      const updateDoc = {
+        $set: {
+          title: title,
+          content: content,
+          thumbnail: thumbnail
+        }
+      }
+      const result = await blogsCollection.updateOne(query, updateDoc)
+      return res.status(200).send({ message: 'successful', result });
+    })
     //update blog status
     app.patch('/blogs/:id', async (req, res) => {
       const id = req.params.id;
