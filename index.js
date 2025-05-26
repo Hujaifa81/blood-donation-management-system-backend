@@ -5,6 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
+const { parse } = require('dotenv');
 const app = express();
 const port = process.env.PORT || 5000;
 const secretKey = process.env.JWT_SECRET;
@@ -197,19 +198,19 @@ async function run() {
     })
     //get all donation requests
     app.get('/donationRequests', async (req, res) => {
+      const pageLimit=parseInt(req.query.limit)
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
       const skip = (page - 1) * limit;
       const status = req.query.status
       let query = {};
       if (status) {
-        query = {
-          status: status
-        }
+        query.status=status
       }
+      
 
       const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
-      const result = await cursor.skip(skip).limit(limit).toArray();
+      const result =pageLimit?await cursor.limit(pageLimit).toArray() : await cursor.skip(skip).limit(limit).toArray();
 
       res.send(result);
     });
@@ -362,6 +363,25 @@ async function run() {
         });
       }
     });
+    //get  blog with id
+    app.get('/blogs/:id', async (req, res) => {
+      
+      const id = req.params.id;
+      try {
+        let query = {_id: new ObjectId(id)};
+
+        const result = await blogsCollection.findOne(query);
+        res.status(200).send(
+          result
+        );
+      } catch (error) {
+        console.error('Failed to fetch blogs:', error);
+        res.status(500).send({
+          message: 'Internal server error',
+          error: error.message
+        });
+      }
+    });
     //update a blog
     app.put('/blog/:id', async (req, res) => {
       const id = req.params.id
@@ -401,7 +421,7 @@ async function run() {
       const result = await blogsCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
     })
-     //delete a request
+     //delete a blog
     app.delete('/blogs/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
