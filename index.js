@@ -70,7 +70,11 @@ async function run() {
     //users count
     app.get('/users/count', async (req, res) => {
       const status = req.query.status
+      const role = req.query.role
       let query = {}
+      if(role){
+        query.role = role;
+      }
       if (status) {
         query = { status }
       }
@@ -80,17 +84,69 @@ async function run() {
     })
     //get all users
     app.get('/users', async (req, res) => {
-      const status = req.query.status
-      const page = parseInt(req.query.page);
-      const limit = parseInt(req.query.limit);
+      
+      const status = req.query.status;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 0; // 0 means no pagination
       const skip = (page - 1) * limit;
-      let query = {}
+
+      let query={};
+
       if (status) {
-        query.status = status
+        query.status = status;
       }
-      const result = await usersCollection.find(query).skip(skip).limit(limit).toArray()
-      res.send(result)
-    })
+
+      try {
+        const cursor = usersCollection.find(query).sort({ _id: -1 });
+        const result = limit
+          ? await cursor.skip(skip).limit(limit).toArray()
+          : await cursor.toArray();
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: 'Internal server error' });
+      }
+    });
+    //search users by blood group, district, upazila 
+    app.get('/donors/search', async (req, res) => {
+
+      const bloodGroup = req.query.bloodGroup;
+      const district = req.query.district;
+      const upazila = req.query.upazila;
+      const search = req.query.search;
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 0; // 0 means no pagination
+      const skip = (page - 1) * limit;
+      if (!search || !bloodGroup || !district || !upazila) {
+        return res.status(400).send({ message: 'At least one search parameter is required' });
+      }
+      let query = {};
+
+      if (search) {
+        if (bloodGroup) {
+          query.bloodGroup = bloodGroup;
+        }
+        if (district) {
+          query.district = district;
+        }
+        if (upazila) {
+          query.upazila = upazila;
+        }
+        query.role = 'donor'; 
+      }
+
+      try {
+        const cursor = usersCollection.find(query).sort({ _id: -1 });
+        const result = limit
+          ? await cursor.skip(skip).limit(limit).toArray()
+          : await cursor.toArray();
+
+        res.send(result);
+      } catch (error) {
+        res.status(500).send({ message: 'Internal server error' });
+      }
+    });
+
     //get single user by email
     app.get('/user/:email', async (req, res) => {
       const email = req.params.email
@@ -198,19 +254,19 @@ async function run() {
     })
     //get all donation requests
     app.get('/donationRequests', async (req, res) => {
-      const pageLimit=parseInt(req.query.limit)
+      const pageLimit = parseInt(req.query.limit)
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
       const skip = (page - 1) * limit;
       const status = req.query.status
       let query = {};
       if (status) {
-        query.status=status
+        query.status = status
       }
-      
+
 
       const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
-      const result =pageLimit?await cursor.limit(pageLimit).toArray() : await cursor.skip(skip).limit(limit).toArray();
+      const result = pageLimit ? await cursor.limit(pageLimit).toArray() : await cursor.skip(skip).limit(limit).toArray();
 
       res.send(result);
     });
@@ -365,10 +421,10 @@ async function run() {
     });
     //get  blog with id
     app.get('/blogs/:id', async (req, res) => {
-      
+
       const id = req.params.id;
       try {
-        let query = {_id: new ObjectId(id)};
+        let query = { _id: new ObjectId(id) };
 
         const result = await blogsCollection.findOne(query);
         res.status(200).send(
@@ -421,7 +477,7 @@ async function run() {
       const result = await blogsCollection.updateOne(query, updateDoc)
       return res.status(200).send({ message: 'successful', result });
     })
-     //delete a blog
+    //delete a blog
     app.delete('/blogs/:id', async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
