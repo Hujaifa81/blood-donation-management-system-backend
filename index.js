@@ -12,6 +12,7 @@ const secretKey = process.env.JWT_SECRET;
 app.use(cors({
   origin: ['http://localhost:5173', 'https://blood-donation-managemen-7ebd3.web.app'],
   credentials: true,
+  optionSuccessStatus: 200,
 }));
 app.use(express.json());
 app.use(cookieParser());
@@ -38,6 +39,7 @@ const verifyToken = async (req, res, next) => {
 
 }
 
+
 const uri = `mongodb+srv://${process.env.DB_USERNAME}:${process.env.DB_PASSWORD}@cluster0.8oqwp.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -55,24 +57,80 @@ async function run() {
     const usersCollection = client.db('blood_donation').collection('users');
     const donationRequestsCollection = client.db('blood_donation').collection('donationRequests')
     const blogsCollection = client.db('blood_donation').collection('blogs')
-    // Verify JWT token
-    app.post('/jwt', async (req, res) => {
-      const user = req.body;
-      const token = jwt.sign(user, secretKey, { expiresIn: '1h' });
-      res.cookie('token', token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-      })
-        .send({ success: true });
 
+    // verify admin middleware
+    const verifyAdmin = async (req, res, next) => {
+      // console.log('data from verifyToken middleware--->', req.user?.email)
+      const email = req.user?.email
+      const query = { email }
+      const result = await usersCollection.findOne(query)
+      if (!result || result?.role !== 'admin')
+        return res
+          .status(403)
+          .send({ message: 'Forbidden Access! Admin Only Actions!' })
+
+      next()
+    }
+    // verify volunteer middleware
+    const verifyVolunteer = async (req, res, next) => {
+      // console.log('data from verifyToken middleware--->', req.user?.email)
+      const email = req.user?.email
+      const query = { email }
+      const result = await usersCollection.findOne(query)
+      if (!result || result?.role !== 'volunteer')
+        return res
+          .status(403)
+          .send({ message: 'Forbidden Access! Volunteer Only Actions!' })
+
+      next()
+    }
+    // verify admin or volunteer middleware
+    const verifyAdminOrVolunteer = async (req, res, next) => {
+      // console.log('data from verifyToken middleware--->', req.user?.email)
+      const email = req.user?.email
+      const query = { email }
+      const result = await usersCollection.findOne(query)
+      if (!result || (result?.role !== 'admin' && result?.role !== 'volunteer'))
+        return res
+          .status(403)
+          .send({ message: 'Forbidden Access! Admin or Volunteer Only Actions!' })
+
+      next()
+    }
+    // verify admin  or donor middleware
+    const verifyDonorOrAdmin = async (req, res, next) => {
+      // console.log('data from verifyToken middleware--->', req.user?.email)
+      const email = req.user?.email
+      const query = { email }
+      const result = await usersCollection.findOne(query)
+      if (!result || (result?.role !== 'donor' && result?.role !== 'admin'))
+        return res
+          .status(403)
+          .send({ message: 'Forbidden Access! Donor or Admin Only Actions!' })
+
+      next()
+    }
+
+    // Generate jwt token
+    app.post('/jwt', async (req, res) => {
+      const email = req.body
+      const token = jwt.sign(email, secretKey, {
+        expiresIn: '1d',
+      })
+      res
+        .cookie('token', token, {
+          httpOnly: true,
+          secure: process.env.NODE_ENV === 'production',
+          sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+        })
+        .send({ success: true })
     })
     //users count
-    app.get('/users/count', async (req, res) => {
+    app.get('/users/count', verifyToken, verifyAdmin, async (req, res) => {
       const status = req.query.status
       const role = req.query.role
       let query = {}
-      if(role){
+      if (role) {
         query.role = role;
       }
       if (status) {
@@ -83,14 +141,14 @@ async function run() {
       res.send(result)
     })
     //get all users
-    app.get('/users', async (req, res) => {
-      
+    app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
+
       const status = req.query.status;
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 0; // 0 means no pagination
       const skip = (page - 1) * limit;
 
-      let query={};
+      let query = {};
 
       if (status) {
         query.status = status;
@@ -132,7 +190,7 @@ async function run() {
         if (upazila) {
           query.upazila = upazila;
         }
-        query.role = 'donor'; 
+        query.role = 'donor';
       }
 
       try {
@@ -148,8 +206,11 @@ async function run() {
     });
 
     //get single user by email
-    app.get('/user/:email', async (req, res) => {
+    app.get('/user/:email', verifyToken, async (req, res) => {
       const email = req.params.email
+      if (req.user?.email !== email) {
+        return res.status(403).send({ message: 'Forbidden Access! You can only access your own data.' });
+      }
       const query = { email }
       const result = await usersCollection.findOne(query)
       res.send(result)
@@ -182,8 +243,11 @@ async function run() {
       });
     })
     //update user details
-    app.put('/user/:email', async (req, res) => {
+    app.put('/user/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
+      if (req.user?.email !== email) {
+        return res.status(403).send({ message: 'Forbidden Access! You can only access your own data.' });
+      }
       const { name, bloodGroup, district, upazila, image } = req.body
       const query = { email }
       const updateDoc = {
@@ -200,7 +264,7 @@ async function run() {
 
     })
     //update user status or role
-    app.patch('/user/:id', async (req, res) => {
+    app.patch('/user/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const data = req.body
       const query = { _id: new ObjectId(id) }
@@ -224,8 +288,11 @@ async function run() {
       return res.status(200).send({ message: 'successful', result });
     })
     //donation requests count by email
-    app.get('/donationRequests/count/:email', async (req, res) => {
+    app.get('/donationRequests/count/:email', verifyToken, async (req, res) => {
       const email = req.params.email
+      if (req.user?.email !== email) {
+        return res.status(403).send({ message: 'Forbidden Access! You can only access your own data.' });
+      }
       const status = req.query.status
       let query = { email: email }
       if (status) {
@@ -235,15 +302,15 @@ async function run() {
       res.send(result)
     })
     //get single donation request by id
-    app.get('/donationRequest/:id', async (req, res) => {
+    app.get('/donationRequest/:id', verifyToken, async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) }; // Ensure this matches your DB field
+      const query = { _id: new ObjectId(id) };
 
       const result = await donationRequestsCollection.findOne(query);
       res.send(result);
     });
     //donation requests count
-    app.get('/donationRequests/count', async (req, res) => {
+    app.get('/donationRequests/count', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const status = req.query.status
       let query = {}
       if (status) {
@@ -253,7 +320,7 @@ async function run() {
       res.send(result)
     })
     //get all donation requests
-    app.get('/donationRequests', async (req, res) => {
+    app.get('/donationRequests', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const pageLimit = parseInt(req.query.limit)
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
@@ -271,8 +338,11 @@ async function run() {
       res.send(result);
     });
     //get donation request by email
-    app.get('/donationRequests/:email', async (req, res) => {
+    app.get('/donationRequests/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
+      if (req.user?.email !== email) {
+        return res.status(403).send({ message: 'Forbidden Access! You can only access your own data.' });
+      }
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
       const skip = (page - 1) * limit;
@@ -293,24 +363,29 @@ async function run() {
     });
 
     //create donation request
-    app.post('/donationRequests/:email', async (req, res) => {
+    app.post('/donationRequests/:email', verifyToken, async (req, res) => {
       const email = req.params.email
+      if (req.user?.email !== email) {
+        return res.status(403).send({ message: 'Forbidden Access! You can only access your own data.' });
+      }
       const data = req.body
       const user = await usersCollection.findOne({ email });
-      if (user.status === 'blocked') {
+      if (user.status === 'active') {
+        const result = await donationRequestsCollection.insertOne({
+          ...data,
+          status: 'pending'
+        })
+        res.status(201).send({
+          message: 'Donation Request created successfully',
+          result
+        });
+      }
+      else {
         return res.status(200).send({ message: 'User is blocked', result });
       }
-      const result = await donationRequestsCollection.insertOne({
-        ...data,
-        status: 'pending'
-      })
-      res.status(201).send({
-        message: 'Donation Request created successfully',
-        result
-      });
     })
     //update donation request
-    app.put('/donationRequests/:id', async (req, res) => {
+    app.put('/donationRequests/:id', verifyToken, verifyDonorOrAdmin, async (req, res) => {
       const id = req.params.id
       const { recipientName, recipientDistrict, donationTime, recipientUpazila, hospitalName, fullAddress, bloodGroup, donationDate } = req.body
       const query = { _id: new ObjectId(id) }
@@ -333,7 +408,7 @@ async function run() {
       return res.status(200).send({ message: 'successful', result });
     })
     //update request status
-    app.patch('/donationRequests/:id', async (req, res) => {
+    app.patch('/donationRequests/:id', verifyToken, async (req, res) => {
       const id = req.params.id
       const { status } = req.body
       const query = { _id: new ObjectId(id) }
@@ -355,23 +430,28 @@ async function run() {
       return res.status(200).send({ message: 'successful', result });
     })
     //delete a request
-    app.delete('/donationRequests/:id', async (req, res) => {
+    app.delete('/donationRequests/:id', verifyToken, verifyDonorOrAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await donationRequestsCollection.deleteOne(query)
       res.send({ success: true })
     })
     //logout
-    app.post('/logout', async (req, res) => {
-      res.clearCookie('token', {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',// Set to true if using HTTPS
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
-      })
-      res.send({ success: true });
+    app.get('/logout', async (req, res) => {
+      try {
+        res
+          .clearCookie('token', {
+            maxAge: 0,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+          })
+          .send({ success: true })
+      } catch (err) {
+        res.status(500).send(err)
+      }
     })
     //create a blog
-    app.post('/blogs', async (req, res) => {
+    app.post('/blogs', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const data = req.body
       const result = await blogsCollection.insertOne({
         ...data,
@@ -439,7 +519,7 @@ async function run() {
       }
     });
     //update a blog
-    app.put('/blog/:id', async (req, res) => {
+    app.put('/blog/:id', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const id = req.params.id
       const { title, content, thumbnail } = req.body
       const query = { _id: new ObjectId(id) }
@@ -454,7 +534,7 @@ async function run() {
       return res.status(200).send({ message: 'successful', result });
     })
     //update blog status
-    app.patch('/blogs/:id', async (req, res) => {
+    app.patch('/blogs/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const { status } = req.body
       const query = { _id: new ObjectId(id) }
@@ -478,7 +558,7 @@ async function run() {
       return res.status(200).send({ message: 'successful', result });
     })
     //delete a blog
-    app.delete('/blogs/:id', async (req, res) => {
+    app.delete('/blogs/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const query = { _id: new ObjectId(id) }
       const result = await blogsCollection.deleteOne(query)
