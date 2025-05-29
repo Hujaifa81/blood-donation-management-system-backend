@@ -9,6 +9,7 @@ const { parse } = require('dotenv');
 const app = express();
 const port = process.env.PORT || 5000;
 const secretKey = process.env.JWT_SECRET;
+const stripe = require('stripe')(process.env.PAYMENT_SECRET_KEY)
 app.use(cors({
   origin: ['http://localhost:5173', 'https://blood-donation-managemen-7ebd3.web.app'],
   credentials: true,
@@ -57,6 +58,7 @@ async function run() {
     const usersCollection = client.db('blood_donation').collection('users');
     const donationRequestsCollection = client.db('blood_donation').collection('donationRequests')
     const blogsCollection = client.db('blood_donation').collection('blogs')
+    const fundingCollection = client.db('blood_donation').collection('funding')
 
     // verify admin middleware
     const verifyAdmin = async (req, res, next) => {
@@ -310,7 +312,7 @@ async function run() {
       res.send(result);
     });
     //donation requests count
-    app.get('/donationRequests/count', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
+    app.get('/donationRequests/count', async (req, res) => {
       const status = req.query.status
       let query = {}
       if (status) {
@@ -320,7 +322,7 @@ async function run() {
       res.send(result)
     })
     //get all donation requests
-    app.get('/donationRequests', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
+    app.get('/donationRequests', async (req, res) => {
       const pageLimit = parseInt(req.query.limit)
       const page = parseInt(req.query.page);
       const limit = parseInt(req.query.limit);
@@ -437,19 +439,22 @@ async function run() {
       res.send({ success: true })
     })
     //logout
-    app.get('/logout', async (req, res) => {
+    app.post('/logout', async (req, res) => {
       try {
+
         res
           .clearCookie('token', {
             maxAge: 0,
             secure: process.env.NODE_ENV === 'production',
             sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
           })
-          .send({ success: true })
+          .send({ success: true });
       } catch (err) {
-        res.status(500).send(err)
+
+        res.status(500).send(err);
       }
-    })
+    });
+
     //create a blog
     app.post('/blogs', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const data = req.body
@@ -564,6 +569,58 @@ async function run() {
       const result = await blogsCollection.deleteOne(query)
       res.send({ success: true })
     })
+    app.post('/funding', async (req, res) => {
+      const { amount, email, transactionId } = req.body;
+
+      // 1. Find the user
+      const user = await usersCollection.findOne({ email });
+      if (!user) {
+        return res.status(404).send({ message: 'User not found' });
+      }
+
+      // 2. Check if funding exists
+      const existingFunding = await fundingCollection.findOne({ email });
+
+      let result;
+
+      if (existingFunding) {
+        // Update existing funding
+        result = await fundingCollection.updateOne(
+          { email },
+          {
+            $inc: { funding: parseFloat(amount) },
+            $push: { transactionIds: transactionId },
+            $set: { updatedAt: new Date() },
+          }
+        );
+      } else {
+        // Insert new funding record
+        result = await fundingCollection.insertOne({
+          email,
+          funding: parseFloat(amount),
+          transactionIds: [transactionId],
+          createdAt: new Date(),
+        });
+      }
+
+      return res.status(200).send({ message: 'Funding added successfully', result });
+    });
+
+
+    // create payment intent
+    app.post('/create-payment-intent', async (req, res) => {
+      const { amount } = req.body
+
+      const { client_secret } = await stripe.paymentIntents.create({
+        amount: amount * 100,
+        currency: 'usd',
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      })
+      res.send({ clientSecret: client_secret })
+    })
+
     // // Connect the client to the server	(optional starting in v4.7)
 
     // // Send a ping to confirm a successful connection
