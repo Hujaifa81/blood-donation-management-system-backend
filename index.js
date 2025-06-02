@@ -54,7 +54,7 @@ const client = new MongoClient(uri, {
 
 async function run() {
   try {
-    // await client.connect();
+    await client.connect();
     const usersCollection = client.db('blood_donation').collection('users');
     const donationRequestsCollection = client.db('blood_donation').collection('donationRequests')
     const blogsCollection = client.db('blood_donation').collection('blogs')
@@ -128,7 +128,7 @@ async function run() {
         .send({ success: true })
     })
     //users count
-    app.get('/users/count', verifyToken, verifyAdmin, async (req, res) => {
+    app.get('/users/count', verifyToken, verifyAdminOrVolunteer, async (req, res) => {
       const status = req.query.status
       const role = req.query.role
       let query = {}
@@ -569,6 +569,27 @@ async function run() {
       const result = await blogsCollection.deleteOne(query)
       res.send({ success: true })
     })
+    //get total amount of funding
+    app.get('/total-funding', async (req, res) => {
+      const result = await fundingCollection.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalFunding: { $sum: "$funding" }
+          }
+        },
+        {
+          $project: {
+            _id: 0,
+            totalFunding: 1
+          }
+        }
+      ]).toArray();
+
+      res.send(result[0] ? result[0].totalFunding : 0);
+    });
+
+
     app.post('/funding', async (req, res) => {
       const { amount, email, transactionId } = req.body;
 
@@ -606,7 +627,6 @@ async function run() {
       return res.status(200).send({ message: 'Funding added successfully', result });
     });
 
-
     // create payment intent
     app.post('/create-payment-intent', async (req, res) => {
       const { amount } = req.body
@@ -621,11 +641,11 @@ async function run() {
       res.send({ clientSecret: client_secret })
     })
 
-    // // Connect the client to the server	(optional starting in v4.7)
+    // Connect the client to the server	(optional starting in v4.7)
 
-    // // Send a ping to confirm a successful connection
-    // await client.db("admin").command({ ping: 1 });
-    // // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+    // Send a ping to confirm a successful connection
+    await client.db("admin").command({ ping: 1 });
+    console.log("Pinged your deployment. You successfully connected to MongoDB!");
   } finally {
     // Ensures that the client will close when you finish/error
     // await client.close();
