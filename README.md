@@ -1,6 +1,10 @@
 
 # 🩸 Red Love-Blood Donation Management System - Backend
 
+> 🧪 **Admin credentials for testing (can be pre-added manually to database):**  
+> Email: `admin@admin.com`  
+> Password: `123456@aA`
+
 This is the backend server for the Blood Donation Management System. It provides RESTful APIs to manage users, blood donation requests, blog posts, and payment processing.
 
 🔗 **Frontend Repository:** [Frontend GitHub](https://github.com/Hujaifa81/blood-donation-management-system-frontend)  
@@ -81,9 +85,6 @@ This is the backend server for the Blood Donation Management System. It provides
   - `POST /funding`
   - `POST /create-payment-intent`
 
-- Admin credentials for testing (can be pre-added manually to database):
-  - **Email:** `admin@admin.com`
-  - **Password:** `123456@aA`
 
 ---
 
