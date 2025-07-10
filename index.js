@@ -5,7 +5,6 @@ const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
-const { parse } = require('dotenv');
 const app = express();
 const port = process.env.PORT || 5000;
 const secretKey = process.env.JWT_SECRET;
@@ -323,22 +322,36 @@ async function run() {
     })
     //get all donation requests
     app.get('/donationRequests', async (req, res) => {
-      const pageLimit = parseInt(req.query.limit)
-      const page = parseInt(req.query.page);
-      const limit = parseInt(req.query.limit);
-      const skip = (page - 1) * limit;
-      const status = req.query.status
-      let query = {};
-      if (status) {
-        query.status = status
-      }
+  const pageLimit = parseInt(req.query.pageLimit);
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+  const status = req.query.status;
 
+  const query = {};
+  if (status) {
+    query.status = status;
+  }
 
-      const cursor = await donationRequestsCollection.find(query).sort({ _id: -1 })
-      const result = pageLimit ? await cursor.limit(pageLimit).toArray() : await cursor.skip(skip).limit(limit).toArray();
+  try {
+    const cursor = donationRequestsCollection.find(query).sort({ _id: -1 });
 
-      res.send(result);
-    });
+    let result;
+    if (pageLimit && pageLimit > 0) {
+      // Use fixed limit for dashboard or preview, ignore pagination
+      result = await cursor.limit(pageLimit).toArray();
+    } else {
+      // Paginated version
+      result = await cursor.skip(skip).limit(limit).toArray();
+    }
+
+    res.send(result);
+  } catch (error) {
+    console.error('Error fetching donation requests:', error);
+    res.status(500).send({ error: 'Failed to fetch donation requests' });
+  }
+});
+
     //get donation request by email
     app.get('/donationRequests/:email', verifyToken, async (req, res) => {
       const email = req.params.email;
