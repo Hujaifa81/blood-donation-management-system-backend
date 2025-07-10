@@ -1,7 +1,7 @@
 
 # 🩸 Red Love-Blood Donation Management System - Backend
 
-> 🧪 **Admin credentials for testing (can be pre-added manually to database):** 
+> 🧪 **Admin credentials for testing (can be pre-added manually to database):**  
 > Email: `admin@admin.com`  
 > Password: `123456@aA`
 
